@@ -3,8 +3,8 @@ import datetime
 import numpy as np
 import pandas as pd
 
-DS_ORIGINAL = './dataset/original/'
-DS_REDUCED = './dataset/reduced/'
+DS_ORIGINAL = os.path.join("dataset", "original")
+DS_REDUCED = os.path.join("dataset", "reduced")
 
 def net_summary(dir, delimiter) -> pd.DataFrame:
     """ Return a dataframe reporting the number of nodes and edges for each network file """
