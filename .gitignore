@@ -130,4 +130,5 @@ dmypy.json
 
 # Dataset and output files
 dataset/reduced/
+clustering_data/
 *.csv
