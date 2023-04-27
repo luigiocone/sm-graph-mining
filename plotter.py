@@ -17,7 +17,7 @@ mc_pairs = [
 ]
 NUM_CLUSTER = len(mc_pairs)
 
-if __file__ == "__main__":
+if __name__ == "__main__":
     # Read df and modify file name (save only "month_day" part of file name) 
     df = pd.read_csv(filepath_or_buffer="metrics.csv", delimiter=',')
     df['file'] = df['file'].str[18:-4]
