@@ -3,7 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from clustering import CLUSTERING_FILE
 
-NUM_CLUSTER = 5
+# How many clusters select
+NUM_CLUSTER = 8
 
 # Marker color pairs
 mc_pairs = [
@@ -20,22 +21,23 @@ mc_pairs = [
     ['X', 'tab:cyan']
 ]
 
+# Read df and modify file name (save only "month_day" part of file name) 
 df = pd.read_csv(filepath_or_buffer="metrics.csv", delimiter=',')
-df['file'] = df['file'].str[13:-4]
+df['file'] = df['file'].str[18:-4]
 
-# Picking the 5 largest clusters 
+# Picking the 8 largest clusters 
 with open(CLUSTERING_FILE) as file:
     clusters = json.load(file)
 clusters = list(clusters.values())
-clusters.sort(key = len, reverse=True)
-clusters = clusters[:NUM_CLUSTER]
 
 # For each metric
-for i in range(1, 7):
-    metric = df.columns[i]
+metrics = df.columns
+for i in range(1, len(metrics)):
+    metric = metrics[i]
     # For each cluster
-    for j in range(NUM_CLUSTER):
-        temp_df = df.filter(items=clusters[j], axis=0)
+    for j in range(NUM_CLUSTER+1):
+        mask = df['file'].isin(clusters[j])
+        temp_df = df[mask]
         plt.scatter(temp_df['file'], temp_df[metric], marker=mc_pairs[j][0], c=mc_pairs[j][1])
     plt.xticks(rotation=90)
     plt.title(metric)
