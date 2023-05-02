@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
     # Assign cluster id to files
     df['cluster_id'] = df['file'].apply(lambda str : map_group(str[18:-4], cluster_dict))
-    df.to_csv(path_or_buf=os.path.join(CLUSTERING_FOLDER, 'clustering.csv'))
+    df.to_csv(path_or_buf='metrics.csv')
 
     # A pretty way to dump this kind of json file
     string = json.dumps(cluster_dict)

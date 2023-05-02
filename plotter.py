@@ -18,15 +18,15 @@ mc_pairs = [
 NUM_CLUSTER = len(mc_pairs)
 
 def scatter_plot(df : pd.DataFrame, metric):
-    df.sort_values(by='tot_visitors')
-    #plt.bar(df['tot_visitors'], df[metric])
-    plt.scatter(df['tot_visitors'], df[metric])
+    df.sort_values(by='num_nodes')
+    #plt.bar(df['num_nodes'], df[metric])
+    plt.scatter(df['num_nodes'], df[metric])
     plt.xticks(rotation=90)
     plt.title(metric)
 
 def bridges_and_cc(df):
     start = 50; stop = 450; step = 10;
-    temp_df = df.groupby(pd.cut(df['tot_visitors'], range(start, stop+step, step))).mean(numeric_only=True)
+    temp_df = df.groupby(pd.cut(df['num_nodes'], range(start, stop+step, step))).mean(numeric_only=True)
     plt.bar(range(start, stop, step), temp_df['bridges'             ], align='edge', width=step, color='b', edgecolor='k')
     plt.bar(range(start, stop, step), temp_df['connected_components'], align='edge', width=step, color='r', edgecolor='k')
     
@@ -40,7 +40,7 @@ def bridges_and_cc(df):
 
 def plot_metric_by_visitors(df : pd.DataFrame, metric):
     start = 50; stop = 450; step = 10;
-    temp_df = df.groupby(pd.cut(df['tot_visitors'], range(start, stop+step, step))).mean(numeric_only=True)
+    temp_df = df.groupby(pd.cut(df['num_nodes'], range(start, stop+step, step))).mean(numeric_only=True)
     plt.bar(range(start, stop, step), temp_df[metric], align='edge', width=step, color='b', edgecolor='k')
     plt.xlabel('Daily visitors', fontsize=13)
     plt.ylabel(metric.capitalize() + ' (average)', fontsize=13)
