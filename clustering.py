@@ -7,7 +7,7 @@ import scipy.cluster.hierarchy as sch
 MAX_HEIGHT = 0.25
 CLUSTERING_FOLDER = "clustering_data"
 CLUSTERING_FILE = os.path.join(CLUSTERING_FOLDER, "clusters.json")
-full_df = pd.read_csv(filepath_or_buffer="0.netsummary.csv")
+full_df = pd.read_csv(filepath_or_buffer="metrics.csv")
 
 def min_max_normalization(df):
     min = df.min()
@@ -29,6 +29,9 @@ def get_clusters_dict(linkage_matrix, threshold=MAX_HEIGHT):
 def max_tot_norm(cluster):
     return df.filter(items=cluster, axis=0)['tot_norm'].max()    
 
+def map_group(date, clusters):
+    for key, cluster in clusters.items():
+        if date in cluster: return key
 
 if __name__ == '__main__':
     if not os.path.exists(CLUSTERING_FOLDER):
@@ -39,7 +42,6 @@ if __name__ == '__main__':
     df['num_nodes_norm'] = min_max_normalization(df['num_nodes'])
     df['num_edges_norm'] = min_max_normalization(df['num_edges'])
     df['tot_norm'] = df['num_nodes_norm'] + df['num_edges_norm']
-    df.to_csv(path_or_buf=os.path.join(CLUSTERING_FOLDER, 'netsummary_normalized.csv'))
     
     # Compute the distance matrix using the Euclidean distance metric
     data = df[['num_nodes_norm', 'num_edges_norm']]
@@ -60,6 +62,10 @@ if __name__ == '__main__':
     for key, value in cluster_dict.items():
         value = [labels[v] for v in value]
         cluster_dict[key] = value
+
+    # Assign cluster id to files
+    df['cluster_id'] = df['file'].apply(lambda str : map_group(str[18:-4], cluster_dict))
+    df.to_csv(path_or_buf=os.path.join(CLUSTERING_FOLDER, 'clustering.csv'))
 
     # A pretty way to dump this kind of json file
     string = json.dumps(cluster_dict)

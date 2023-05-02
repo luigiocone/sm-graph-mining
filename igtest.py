@@ -2,11 +2,15 @@ import os
 import pytz
 import igraph as ig
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from preprocessing import DS_REDUCED
+from clustering import CLUSTERING_FILE
 
 # matplotlib colors
-mpl_colors = ["mediumpurple", "crimson", "salmon", "khaki", "lightgreen", "seagreen", "steelblue", "silver", "black"]
+mpl_colors = ["mediumpurple", "pink", "salmon", "khaki", "lightgreen", "lightskyblue", "azure", "silver", "black"]
+# mpl_colors = ["mediumpurple", "crimson", "salmon", "khaki", "lightgreen", "seagreen", "steelblue", "silver", "black"]
+# mpl_colors = ["mediumpurple", "violet", "salmon", "khaki", "lightgreen", "seagreen", "steelblue", "silver", "black"]
 
 def plot_graph(g : ig.Graph):
     g["title"] = "Test network"
@@ -27,17 +31,22 @@ def plot_graph(g : ig.Graph):
         else: value = 2
         edge_width.append(value)
     
+    """# Edge thickness=3 if that edge is a bridge, else 0.1
+    edge_width = [0.1] * len(g.es)
+    for bridge in g.bridges():
+        edge_width[bridge] = 3"""
+    
     # Building legend labels and handles 
     labels = []
     handles = []
     for i in range(max_hour-min_hour+1):
         labels.append(f'{min_hour+i}:00 - {min_hour+i}:59')
         #handle = plt.Line2D([], [], linewidth=1.5, marker='o', color = "black", markeredgewidth=1.5, markersize=8, markerfacecolor=mpl_colors[i])
-        handle = plt.Line2D([], [], linestyle='', marker='o', color=mpl_colors[i], markersize=8)
+        handle = plt.Line2D([], [], linestyle='', marker='o', color=mpl_colors[i], markersize=10)
         handles.append(handle)
 
     labels.append(r'$< 10$ min')
-    handles.append(plt.Line2D([], [], linestyle='-', linewidth=0.5, marker='', color='black'))
+    handles.append(plt.Line2D([], [], linestyle='-', linewidth=0.2, marker='', color='black'))
     labels.append(r'$ \geq 10$ min')
     handles.append(plt.Line2D([], [], linestyle='-', linewidth=2, marker='', color='black'))
 
@@ -57,7 +66,8 @@ def plot_graph(g : ig.Graph):
     )
     # Enable LaTeX text rendering (requires latex istalled and accessible from python environment)
     #plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
-    ax.legend(handles=handles, labels=labels, fontsize=8)
+    #plt.rcParams.update({"font.family": "monospace"})
+    #ax.legend(handles=handles, labels=labels, fontsize=15)
     plt.show()
 
 def build_graph(df : pd.DataFrame):
@@ -66,7 +76,6 @@ def build_graph(df : pd.DataFrame):
     
     # Drop duplicated edges and aggregate weights and timestamp for each edge removal
     df = df.groupby(['node1', 'node2'], as_index=False, sort=False).agg({'intensity':'sum', 'timestamp':'first'})
-    
     # Build graph from a list of edges
     edges = list(zip(df['node1'], df['node2']))
     g = ig.Graph(edges=edges, directed=False)
@@ -103,12 +112,23 @@ if __name__ == '__main__':
         g = build_graph(df)
         # plot_graph(g)
         
+        # Degree distribution of current network
+        # plt.hist(g.degree(), edgecolor='k', bins=10, density=True)
+        # plt.show()
+        
         # Build a metrics row for current network
         row = {
             "file": file_name,
+            "num_nodes" : len(g.vs),
+            "num_edges" : len(g.es),
             "diameter": g.diameter(),
-            "avg_closeness": sum(g.closeness()) / len(g.closeness()),
+            "density" : g.density(loops=False),
+            "bridges" : len(g.bridges()),
+            "connected_components" : len(g.connected_components()),
+            "degrees" : g.degree(),
             "avg_degree": sum(g.degree()) / len(g.degree()),
+            #"median_degree": np.median(g.degree()),
+            "avg_closeness": sum(g.closeness()) / len(g.closeness()),
             "avg_betweenness": sum(g.betweenness()) / len(g.betweenness()),
             "avg_local_clustering_coeff": g.transitivity_avglocal_undirected(),
             "avg_global_clustering_coeff": g.transitivity_undirected()
