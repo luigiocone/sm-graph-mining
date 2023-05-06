@@ -7,7 +7,9 @@ import scipy.cluster.hierarchy as sch
 MAX_HEIGHT = 0.25
 CLUSTERING_FOLDER = "clustering_data"
 CLUSTERING_FILE = os.path.join(CLUSTERING_FOLDER, "clusters.json")
-full_df = pd.read_csv(filepath_or_buffer="metrics.csv")
+
+if os.path.exists("metrics.csv"):
+    full_df = pd.read_csv(filepath_or_buffer="metrics.csv")
 
 def min_max_normalization(df):
     min = df.min()

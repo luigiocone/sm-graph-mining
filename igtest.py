@@ -4,7 +4,7 @@ import igraph as ig
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from preprocessing import DS_REDUCED
+from preprocessing import DS_TRANSFORMED
 from clustering import CLUSTERING_FILE
 
 # matplotlib colors
@@ -71,16 +71,11 @@ def plot_graph(g : ig.Graph):
     plt.show()
 
 def build_graph(df : pd.DataFrame):
-    # Add a column of ones representing the intensity of a contact. One is the lowest intensity, will be aggregated later 
-    df['intensity'] = pd.Series(1, df.index)
-    
-    # Drop duplicated edges and aggregate weights and timestamp for each edge removal
-    df = df.groupby(['node1', 'node2'], as_index=False, sort=False).agg({'intensity':'sum', 'timestamp':'first'})
     # Build graph from a list of edges
     edges = list(zip(df['node1'], df['node2']))
     g = ig.Graph(edges=edges, directed=False)
     
-    # Assign weights to edges (contacts between humans) and name to vertices (visitor)
+    # Assign weights to edges and IDs to vertices
     g.es['intensity'] = df['intensity'].to_list()
     g.vs['name'] = [v.index for v in g.vs]
     
@@ -98,23 +93,40 @@ def build_graph(df : pd.DataFrame):
     g.vs['entry'] = [df.loc[v.index, 'timestamp'] for v in g.vs]
     return g
 
+def get_brokers(g, max_degree=3, btw_quantile=0.85):
+    # To modify to get a list of nodes
+    btw = g.betweenness()
+    degrees = g.degree()
+    max_b = np.quantile(btw, btw_quantile); 
+
+    brokers = []
+    for pair in zip(btw, degrees):
+        if pair[0] >= max_b and pair[1] <= max_degree:
+            brokers.append(pair)
+    return brokers
+
 
 if __name__ == '__main__':
     metrics = []
-    for file_name in os.listdir(DS_REDUCED):
+    for file_name in os.listdir(DS_TRANSFORMED):
         if not file_name.startswith("listcontacts"): continue
-        df = pd.read_csv(
-            filepath_or_buffer=os.path.join(DS_REDUCED, file_name), 
-            delimiter=',',
-            header=None,
-            names=['timestamp', 'node1', 'node2']
-        )
+        df = pd.read_csv(os.path.join(DS_TRANSFORMED, file_name), delimiter=',')
         g = build_graph(df)
         # plot_graph(g)
-        
+        #b = g.betweenness()
+        #plt.boxplot(b, vert=False)
+        #plt.vlines(x=np.mean(b), color='r', ymin=0, ymax=2)
+        #plt.show()
+
         # Degree distribution of current network
-        # plt.hist(g.degree(), edgecolor='k', bins=10, density=True)
-        # plt.show()
+        #plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
+        #plt.hist(g.degree(), edgecolor='k', bins=20, density=True)
+        #plt.xlabel(r'$\theta$', fontsize=13)
+        #plt.ylabel(r'$P(\theta)$', fontsize=13)
+        #plt.tick_params(axis='both', labelsize=10)
+        #plt.tight_layout()
+        #plt.show()
+        #continue
         
         # Build a metrics row for current network
         row = {
@@ -124,12 +136,14 @@ if __name__ == '__main__':
             "diameter": g.diameter(),
             "density" : g.density(loops=False),
             "bridges" : len(g.bridges()),
+            "brokers" : len(get_brokers(g)),
             "connected_components" : len(g.connected_components()),
             "degrees" : g.degree(),
             "avg_degree": sum(g.degree()) / len(g.degree()),
             #"median_degree": np.median(g.degree()),
             "avg_closeness": sum(g.closeness()) / len(g.closeness()),
             "avg_betweenness": sum(g.betweenness()) / len(g.betweenness()),
+            "med_betweenness": np.median(g.betweenness()),
             "avg_local_clustering_coeff": g.transitivity_avglocal_undirected(),
             "avg_global_clustering_coeff": g.transitivity_undirected()
         }
