@@ -1,11 +1,12 @@
 import os
+import json
 import pytz
 import igraph as ig
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from preprocessing import DS_TRANSFORMED
-from clustering import CLUSTERING_FILE
+from external_script.encoder import CompactJSONEncoder
 
 # matplotlib colors
 mpl_colors = ["mediumpurple", "pink", "salmon", "khaki", "lightgreen", "lightskyblue", "azure", "silver", "black"]
@@ -70,7 +71,7 @@ def plot_graph(g : ig.Graph):
     #ax.legend(handles=handles, labels=labels, fontsize=15)
     plt.show()
 
-def build_graph(df : pd.DataFrame):
+def build_graph(df : pd.DataFrame) -> ig.Graph:
     # Build graph from a list of edges
     edges = list(zip(df['node1'], df['node2']))
     g = ig.Graph(edges=edges, directed=False)
@@ -107,30 +108,16 @@ def get_brokers(g, max_degree=3, btw_quantile=0.85):
 
 
 if __name__ == '__main__':
-    metrics = []
+    rows = {}
     for file_name in os.listdir(DS_TRANSFORMED):
         if not file_name.startswith("listcontacts"): continue
         df = pd.read_csv(os.path.join(DS_TRANSFORMED, file_name), delimiter=',')
         g = build_graph(df)
+        # plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
         # plot_graph(g)
-        #b = g.betweenness()
-        #plt.boxplot(b, vert=False)
-        #plt.vlines(x=np.mean(b), color='r', ymin=0, ymax=2)
-        #plt.show()
-
-        # Degree distribution of current network
-        #plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
-        #plt.hist(g.degree(), edgecolor='k', bins=20, density=True)
-        #plt.xlabel(r'$\theta$', fontsize=13)
-        #plt.ylabel(r'$P(\theta)$', fontsize=13)
-        #plt.tick_params(axis='both', labelsize=10)
-        #plt.tight_layout()
-        #plt.show()
-        #continue
         
         # Build a metrics row for current network
-        row = {
-            "file": file_name,
+        rows[file_name] = {
             "num_nodes" : len(g.vs),
             "num_edges" : len(g.es),
             "diameter": g.diameter(),
@@ -138,16 +125,16 @@ if __name__ == '__main__':
             "bridges" : len(g.bridges()),
             "brokers" : len(get_brokers(g)),
             "connected_components" : len(g.connected_components()),
-            "degrees" : g.degree(),
-            "avg_degree": sum(g.degree()) / len(g.degree()),
-            #"median_degree": np.median(g.degree()),
-            "avg_closeness": sum(g.closeness()) / len(g.closeness()),
-            "avg_betweenness": sum(g.betweenness()) / len(g.betweenness()),
-            "med_betweenness": np.median(g.betweenness()),
-            "avg_local_clustering_coeff": g.transitivity_avglocal_undirected(),
-            "avg_global_clustering_coeff": g.transitivity_undirected()
+            "degree" : g.degree(),
+            "betweenness" : g.betweenness(),
+            "closeness" : g.closeness(),
+            "eigenvector" : g.eigenvector_centrality(),   # To modify to take into account weights
+            "local_clustering_coeff" : g.transitivity_local_undirected(mode=ig.TRANSITIVITY_ZERO),
+            "global_clustering_coeff" : g.transitivity_undirected()
         }
-        metrics.append(row)
     
-    df = pd.DataFrame(metrics)
-    df.to_csv(path_or_buf='metrics.csv', index=False)
+    text = json.dumps(rows, cls=CompactJSONEncoder)
+    # text = text.replace('nan', 'null')
+    with open('metrics.json', 'w') as output:
+        output.write(text)
+    

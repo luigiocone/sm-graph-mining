@@ -133,3 +133,4 @@ dataset/reduced/
 dataset/transformed/
 clustering_data/
 *.csv
+*.json

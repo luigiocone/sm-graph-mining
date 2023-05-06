@@ -63,9 +63,9 @@ def grouped_barchart(df):
     temp_df = df.groupby(pd.cut(df['num_nodes'], range(start, stop+step, step))).mean(numeric_only=True)
 
     x = np.arange(50, 450, 50)
-    plt.bar(x-15, temp_df['avg_betweenness']  / temp_df['avg_betweenness'].max(), align='edge', width=10, edgecolor='k')
-    plt.bar(x-5,  temp_df['avg_local_clustering_coeff'] , align='edge', width=10, edgecolor='k')
-    plt.bar(x+5,  temp_df['avg_global_clustering_coeff'], align='edge', width=10, edgecolor='k')
+    plt.bar(x-15, temp_df['median_betweenness']  / temp_df['median_betweenness'].max(), align='edge', width=10, edgecolor='k')
+    plt.bar(x-5,  temp_df['local_clustering_coeff'] , align='edge', width=10, edgecolor='k')
+    plt.bar(x+5,  temp_df['global_clustering_coeff'], align='edge', width=10, edgecolor='k')
     plt.xlabel('Daily visitors', fontsize=13)
     plt.legend(loc='upper left', labels=['Betweenness', 'Local clustering coeff.', 'Global clustering coeff.'])
 
@@ -77,21 +77,39 @@ def plot_metric_by_visitors(df : pd.DataFrame, metric):
     plt.xlabel('Daily visitors', fontsize=13)
     plt.ylabel(metric.capitalize() + ' (average)', fontsize=13)
 
-def mean_degree_distribution(df):
-    degrees = df['degrees'].apply(lambda str : json.loads(str)).sum()
-    plt.hist(degrees, edgecolor='k', bins=10, density=True)
+def mean_degree_distribution(df : pd.DataFrame):
+    # Append list to each other and get all degrees
+    degrees = pd.Series(df['degree'].sum())
+    # Get degrees of one graph: 
+    # degrees = pd.Series(df.loc[i, 'degree'])
+    
+    # 'normalize=True' to obtain frequencies insted of count
+    freqs = degrees.value_counts(normalize=True)
+    plt.bar(freqs.index, freqs.values, edgecolor='k')
     #plt.yscale('log')
+    #plt.xticks(range(0, 65, 5))
     plt.xlabel(r'$\theta$', fontsize=13)
     plt.ylabel(r'$P(\theta)$', fontsize=13)
+    plt.show()
 
-def boxplot(series):
+def boxplot(series, mean):
     plt.boxplot(series, vert=False)
-    plt.vlines(x=series.mean(), color='r', ymin=0, ymax=2)
+    plt.vlines(x=mean, color='r', ymin=0, ymax=2)
 
 if __name__ == "__main__":
-    # Read df and modify file name (save only "month_day" part of file name) 
-    df = pd.read_csv(filepath_or_buffer="metrics.csv", delimiter=',')
+    # Read df and modify file name (save only "month_day" part of file name)
+    with open('metrics.json', 'r') as metrics:
+        data = json.load(metrics)
+    df = pd.DataFrame.from_dict(data, orient='index')
+    df.reset_index(level=0, inplace=True, names=['file'])    
     df['file'] = df['file'].str[18:-4]
+    
+    # Summarize metrics of interests
+    df["median_betweenness"] = df["betweenness"].apply(lambda x: np.median(x))
+    df['median_closeness'] = df['closeness'].apply(lambda x: np.median(x))
+    df["mean_local_clustering_coeff"] = df["local_clustering_coeff"].apply(lambda x: np.mean(x))
+
+    # Plt options
     plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
     fig, ax = plt.subplots()
     plt.tick_params(axis='both', labelsize=10)
@@ -100,10 +118,11 @@ if __name__ == "__main__":
     #df['degrees'] = df['degrees'].apply(lambda str : json.loads(str))
     #df['degrees'] = df['degrees'].apply(lambda ls : np.median(ls))
     
-    #grouped_barchart(df)
-    df['med_betweenness'] = df['med_betweenness']  / df['med_betweenness'].max()
-    multiple_scatter_plot(df, ['med_betweenness', 'avg_local_clustering_coeff', 'density'], ax)
+    # 3 SCATTER PLOTS
+    df['median_betweenness'] = df['median_betweenness']  / df['median_betweenness'].max()
+    multiple_scatter_plot(df, ['median_betweenness', 'mean_local_clustering_coeff', 'density'], ax)
     plt.legend(loc='upper left', labels=['Betweenness (normalized)', 'Local clustering coefficient', 'Density'])
+    
     plt.tight_layout()
     plt.show()
 

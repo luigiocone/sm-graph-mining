@@ -3,13 +3,12 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as sch
+from external_script.encoder import CompactJSONEncoder
 
 MAX_HEIGHT = 0.25
 CLUSTERING_FOLDER = "clustering_data"
 CLUSTERING_FILE = os.path.join(CLUSTERING_FOLDER, "clusters.json")
-
-if os.path.exists("metrics.csv"):
-    full_df = pd.read_csv(filepath_or_buffer="metrics.csv")
+full_df = None
 
 def min_max_normalization(df):
     min = df.min()
@@ -36,11 +35,13 @@ def map_group(date, clusters):
         if date in cluster: return key
 
 if __name__ == '__main__':
-    if not os.path.exists(CLUSTERING_FOLDER):
-        os.mkdir(CLUSTERING_FOLDER)
+    with open('metrics.json', 'r') as metrics:
+        json_data = json.load(metrics)
+    full_df = pd.DataFrame.from_dict(json_data, orient='index')
+    full_df.reset_index(level=0, inplace=True, names=['file'])
     df = full_df
-    
-    # Normalize dataframe and save it to csv
+
+    # Normalize dataframe
     df['num_nodes_norm'] = min_max_normalization(df['num_nodes'])
     df['num_edges_norm'] = min_max_normalization(df['num_edges'])
     df['tot_norm'] = df['num_nodes_norm'] + df['num_edges_norm']
@@ -64,16 +65,23 @@ if __name__ == '__main__':
     for key, value in cluster_dict.items():
         value = [labels[v] for v in value]
         cluster_dict[key] = value
-
-    # Assign cluster id to files
-    df['cluster_id'] = df['file'].apply(lambda str : map_group(str[18:-4], cluster_dict))
-    df.to_csv(path_or_buf='metrics.csv')
-
+    
+    # Assign cluster id to metrics days
+    json_data = dict(json_data)
+    for key, value in json_data.items():
+        value['cluster_id'] = map_group(key[18:-4], cluster_dict)
+    with open('metrics.json', 'w') as a:
+        json.dump(json_data, a, cls=CompactJSONEncoder)
+    
     # A pretty way to dump this kind of json file
     string = json.dumps(cluster_dict)
     string = string.replace('], ', '],\n\t')
     string = string.replace('{', '{\n\t')
     string = string.replace('}', '\n}')
+    
+    # Save clusters in a file
+    if not os.path.exists(CLUSTERING_FOLDER):
+        os.mkdir(CLUSTERING_FOLDER)
     with open(os.path.join(CLUSTERING_FOLDER, "clusters.json"), 'w') as output:
         output.write(string)
 
