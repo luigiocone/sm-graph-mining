@@ -106,6 +106,24 @@ def get_brokers(g, max_degree=3, btw_quantile=0.85):
             brokers.append(pair)
     return brokers
 
+def katz_centrality(g : ig.Graph, alpha = 0.5):
+    """ Implementation of: c_K = (I - alpha * A')^(-1)*ones - ones """
+    # Get the adjacency matrix of the connected component with the highest number of nodes
+    components = g.connected_components()
+    longest = max(components, key=len)
+    g = g.induced_subgraph(longest)
+    A = g.get_adjacency(attribute='intensity')
+    
+    # Equation elements
+    A = np.array(A.data)
+    n = A.shape[0]
+    I = np.identity(n)
+    ones = np.ones(n)
+    
+    res = I - alpha * np.transpose(A)      # (I - alpha * A')
+    res = np.linalg.inv(res)               # (I - alpha * A')^(-1)
+    res = np.dot(res, ones) - ones         # (I - alpha * A')^(-1)*ones - ones
+    return res
 
 if __name__ == '__main__':
     rows = {}
@@ -129,6 +147,7 @@ if __name__ == '__main__':
             "betweenness" : g.betweenness(),
             "closeness" : g.closeness(),
             "eigenvector" : g.eigenvector_centrality(),   # To modify to take into account weights
+            "katz" : list(katz_centrality(g)),            # Only for biggest connected components
             "local_clustering_coeff" : g.transitivity_local_undirected(mode=ig.TRANSITIVITY_ZERO),
             "global_clustering_coeff" : g.transitivity_undirected()
         }
