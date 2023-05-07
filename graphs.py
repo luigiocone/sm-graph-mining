@@ -106,13 +106,21 @@ def get_brokers(g, max_degree=3, btw_quantile=0.85):
             brokers.append(pair)
     return brokers
 
-def katz_centrality(g : ig.Graph, alpha = 0.5):
+def katz_centrality(g : ig.Graph, alpha = 0.1):
     """ Implementation of: c_K = (I - alpha * A')^(-1)*ones - ones """
     # Get the adjacency matrix of the connected component with the highest number of nodes
     components = g.connected_components()
     longest = max(components, key=len)
     g = g.induced_subgraph(longest)
     A = g.get_adjacency(attribute='intensity')
+    A = np.array(A.data)
+    
+    # Check if "alpha < 1/max(eigenvalues)"
+    eig, _ = np.linalg.eig(A)
+    max_eig = max(eig)
+    while alpha >= 1/max_eig:    # Maybe a common alpha for all network is better
+        alpha -= 0.001
+    print("alpha used during katz centrality computation: " + str(alpha))
     
     # Equation elements
     A = np.array(A.data)
@@ -123,7 +131,8 @@ def katz_centrality(g : ig.Graph, alpha = 0.5):
     res = I - alpha * np.transpose(A)      # (I - alpha * A')
     res = np.linalg.inv(res)               # (I - alpha * A')^(-1)
     res = np.dot(res, ones) - ones         # (I - alpha * A')^(-1)*ones - ones
-    return res
+    # res = res / np.linalg.norm(res)      # Normalization used by networkx
+    return list(res)
 
 if __name__ == '__main__':
     rows = {}
@@ -147,7 +156,7 @@ if __name__ == '__main__':
             "betweenness" : g.betweenness(),
             "closeness" : g.closeness(),
             "eigenvector" : g.eigenvector_centrality(),   # To modify to take into account weights
-            "katz" : list(katz_centrality(g)),            # Only for biggest connected components
+            "katz" : katz_centrality(g),                  # Only for biggest connected component
             "local_clustering_coeff" : g.transitivity_local_undirected(mode=ig.TRANSITIVITY_ZERO),
             "global_clustering_coeff" : g.transitivity_undirected()
         }
@@ -156,4 +165,39 @@ if __name__ == '__main__':
     # text = text.replace('nan', 'null')
     with open('metrics.json', 'w') as output:
         output.write(text)
+
+
+"""
+# Katz centrality with networkx. Returns the same result
+import networkx as nx
+def katz_centrality(g : ig.Graph, alpha = 0.1):
+    # Get the adjacency matrix of the connected component with the highest number of nodes
+    components = g.connected_components()
+    longest = max(components, key=len)
+    g = g.induced_subgraph(longest)
+    A = g.get_adjacency(attribute='intensity')
+    A = np.array(A.data)
+
+    # Graph creation from adjacency matrix
+    G = nx.from_numpy_array(A)
+    weights = {(u, v): A[u, v] for u, v in G.edges()}
+    nx.set_edge_attributes(G, values=weights, name='intensity')
     
+    # Build alpha parameter
+    eig, _ = np.linalg.eig(A)
+    max_eig = max(eig)
+    while alpha >= 1/max_eig: 
+        alpha -= 0.05
+    print("alpha used during katz centrality computation: " + alpha)
+    
+    # Build beta parameter
+    beta_vector = alpha * np.dot(np.transpose(A), np.ones(A.shape[0]))
+    beta = {}
+    i = 0
+    for node in G.nodes():
+        beta[node] = beta_vector[i]
+        i+=1
+    
+    res = nx.katz_centrality(G, alpha=alpha, beta=beta, normalized=True, weight='intensity')
+    return list(res.values())
+"""
