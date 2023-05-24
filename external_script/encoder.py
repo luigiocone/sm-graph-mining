@@ -15,7 +15,7 @@ class CompactJSONEncoder(json.JSONEncoder):
     MAX_WIDTH = 1000000
     """Maximum width of a container that might be put on a single line."""
 
-    MAX_ITEMS = 500
+    MAX_ITEMS = 5000
     """Maximum number of items in container that might be put on single line."""
 
     def __init__(self, *args, **kwargs):

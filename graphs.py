@@ -5,6 +5,7 @@ import igraph as ig
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import timedelta
 from preprocessing import DS_TRANSFORMED
 from external_script.encoder import CompactJSONEncoder
 
@@ -13,9 +14,10 @@ mpl_colors = ["mediumpurple", "pink", "salmon", "khaki", "lightgreen", "lightsky
 # mpl_colors = ["mediumpurple", "crimson", "salmon", "khaki", "lightgreen", "seagreen", "steelblue", "silver", "black"]
 # mpl_colors = ["mediumpurple", "violet", "salmon", "khaki", "lightgreen", "seagreen", "steelblue", "silver", "black"]
 
-def plot_graph(g : ig.Graph):
+
+def plot_graph(g: ig.Graph):
     g["title"] = "Test network"
-    fig, ax = plt.subplots(figsize=(5,5))
+    fig, ax = plt.subplots(figsize=(5, 5))
     
     # Node color based on entry time-slot
     colors = []
@@ -28,7 +30,7 @@ def plot_graph(g : ig.Graph):
     # Edge thickness based on contact duration
     edge_width = []
     for w in g.es['intensity']:
-        if (w < 10): value = 0.2
+        if w < 10: value = 0.2
         else: value = 2
         edge_width.append(value)
     
@@ -71,7 +73,8 @@ def plot_graph(g : ig.Graph):
     #ax.legend(handles=handles, labels=labels, fontsize=15)
     plt.show()
 
-def build_graph(df : pd.DataFrame) -> ig.Graph:
+
+def build_graph(df: pd.DataFrame) -> ig.Graph:
     # Build graph from a list of edges
     edges = list(zip(df['node1'], df['node2']))
     g = ig.Graph(edges=edges, directed=False)
@@ -85,40 +88,43 @@ def build_graph(df : pd.DataFrame) -> ig.Graph:
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
     df['timestamp'] = df['timestamp'].dt.tz_localize(tz)
     # Melt is equal to the SQL UNPIVOT operation
-    df = pd.melt(df, id_vars='timestamp', value_vars=['node1', 'node2'], value_name='node')
-    df = df[['timestamp', 'node']]
+    df = pd.melt(df, id_vars=['timestamp', 'intensity'], value_vars=['node1', 'node2'], value_name='node')
+    df = df[['timestamp', 'node', 'intensity']]
     # Group by node (hence drop duplicates) and keep the row with the minumum timestamp
-    df = df.loc[df.groupby('node', sort=False)['timestamp'].idxmin()]
-    # Finally, assign entry datetime to vertices
-    df = df.set_index('node')
-    g.vs['entry'] = [df.loc[v.index, 'timestamp'] for v in g.vs]
+    df_entry = df.loc[df.groupby('node', sort=False)['timestamp'].idxmin()]
+    df_exit = df.loc[df.groupby('node', sort=False)['timestamp'].idxmax()]
+    # Finally, assign entry and exit timestamps to vertices
+    df_entry = df_entry.set_index('node')
+    df_exit = df_exit.set_index('node')
+    g.vs['entry'] = [df_entry.loc[v.index, 'timestamp'] for v in g.vs]
+    g.vs['exit'] = [df_exit.loc[v.index, 'timestamp'] for v in g.vs]
+    # Add the last contact duration to the exit timestamp
+    g.vs['exit'] = [v['exit'] + timedelta(seconds=int(df_exit.loc[v.index, 'intensity']) *60) for v in g.vs]
     return g
+
 
 def get_brokers(g, max_degree=3, btw_quantile=0.85):
     # To modify to get a list of nodes
     btw = g.betweenness()
     degrees = g.degree()
-    max_b = np.quantile(btw, btw_quantile); 
-
+    max_btw = np.quantile(btw, btw_quantile)
+    
     brokers = []
-    for pair in zip(btw, degrees):
-        if pair[0] >= max_b and pair[1] <= max_degree:
-            brokers.append(pair)
+    for triple in zip(btw, degrees, g.vs['name']):
+        if triple[0] >= max_btw and triple[1] <= max_degree:
+            brokers.append(triple[2])
     return brokers
 
-def katz_centrality(g : ig.Graph, alpha = 0.1):
+
+def katz_centrality(largest_cc: ig.Graph, alpha):
     """ Implementation of: c_K = (I - alpha * A')^(-1)*ones - ones """
-    # Get the adjacency matrix of the connected component with the highest number of nodes
-    components = g.connected_components()
-    longest = max(components, key=len)
-    g = g.induced_subgraph(longest)
-    A = g.get_adjacency(attribute='intensity')
+    # Get the boolean adjacency matrix
+    A = largest_cc.get_adjacency()
     A = np.array(A.data)
     
-    # Check if "alpha < 1/max(eigenvalues)"
-    eig, _ = np.linalg.eig(A)
-    max_eig = max(eig)
-    while alpha >= 1/max_eig:    # Maybe a common alpha for all network is better
+    # Check if "alpha < 1/max(eigenvalues)". Should be used a common alpha for all networks
+    sr = get_spectral_radius(largest_cc)
+    while alpha >= 1/sr:
         alpha -= 0.001
     print("alpha used during katz centrality computation: " + str(alpha))
     
@@ -134,6 +140,27 @@ def katz_centrality(g : ig.Graph, alpha = 0.1):
     # res = res / np.linalg.norm(res)      # Normalization used by networkx
     return list(res)
 
+
+def get_largest_component(g: ig.Graph) -> ig.Graph:
+    components = g.connected_components()
+    largest = max(components, key=len)
+    return g.induced_subgraph(largest)
+
+
+def get_components_size(g: ig.Graph) -> ig.Graph:
+    cc_sizes = [len(c) for c in g.connected_components()]
+    cc_sizes.sort()
+    return cc_sizes
+
+
+def get_spectral_radius(largest_cc: ig.Graph) -> ig.Graph:
+    A = largest_cc.get_adjacency()
+    A = np.array(A.data)
+    eig, _ = np.linalg.eig(A)
+    modulus = np.abs(max(eig)) # Numpy sometimes return a '+0j' complex part
+    return modulus
+
+
 if __name__ == '__main__':
     rows = {}
     for file_name in os.listdir(DS_TRANSFORMED):
@@ -141,24 +168,37 @@ if __name__ == '__main__':
         df = pd.read_csv(os.path.join(DS_TRANSFORMED, file_name), delimiter=',')
         g = build_graph(df)
         # plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
-        # plot_graph(g)
+        # if file_name.endswith('05_28.csv'): plot_graph(g)
+        
+        weights = [1/w for w in g.es['intensity']]  # igraph consider weights as distances instead of connection strengths
+        largest_cc = get_largest_component(g)
         
         # Build a metrics row for current network
         rows[file_name] = {
-            "num_nodes" : len(g.vs),
-            "num_edges" : len(g.es),
+            "num_nodes": len(g.vs),
+            "num_edges": len(g.es),
             "diameter": g.diameter(),
-            "density" : g.density(loops=False),
-            "bridges" : len(g.bridges()),
-            "brokers" : len(get_brokers(g)),
-            "connected_components" : len(g.connected_components()),
-            "degree" : g.degree(),
-            "betweenness" : g.betweenness(),
-            "closeness" : g.closeness(),
-            "eigenvector" : g.eigenvector_centrality(),   # To modify to take into account weights
-            "katz" : katz_centrality(g),                  # Only for biggest connected component
-            "local_clustering_coeff" : g.transitivity_local_undirected(mode=ig.TRANSITIVITY_ZERO),
-            "global_clustering_coeff" : g.transitivity_undirected()
+            "density": g.density(loops=False),
+            "bridges": len(g.bridges()),
+            "brokers": get_brokers(g),
+            "brokers_entry_time": [g.vs['entry'][b].hour for b in get_brokers(g)],
+            "connected_components_size": get_components_size(g),
+            "degree": g.degree(),
+            "edge_intensities": [i for i in g.es['intensity']] ,
+            "closeness": g.closeness(),
+            "betweenness": g.betweenness(),                               #[b/len(g.vs)**2 for b in g.betweenness()],
+            #"weighted_betweenness": g.betweenness(weights=weights),      # Weights considered as distances
+            "katz": katz_centrality(largest_cc, alpha=0.04),              # 0.04 is "1/max(spectral_radius)" 
+            "nodes_entry_hour": [entry.hour for entry in g.vs['entry']],
+            "nodes_visit_duration": [(exit - entry).total_seconds()/60 for entry, exit in zip(g.vs['entry'], g.vs['exit'])],
+            "largest_connected_component": largest_cc.vs['name'],
+            "largest_cc_spectral_radius": get_spectral_radius(largest_cc),
+            "largest_cc_density": largest_cc.density(loops=False),
+            "largest_cc_num_nodes": len(largest_cc.vs),
+            "largest_cc_num_edges": len(largest_cc.es),
+            "largest_cc_mean_closeness": np.mean(largest_cc.closeness()),
+            "local_clustering_coeff": g.transitivity_local_undirected(mode=ig.TRANSITIVITY_ZERO),
+            "global_clustering_coeff": g.transitivity_undirected()
         }
     
     text = json.dumps(rows, cls=CompactJSONEncoder)

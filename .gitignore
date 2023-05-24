@@ -129,6 +129,7 @@ dmypy.json
 .pyre/
 
 # Dataset and output files
+.idea/
 dataset/reduced/
 dataset/transformed/
 clustering_data/

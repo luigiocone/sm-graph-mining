@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as sch
 from external_script.encoder import CompactJSONEncoder
@@ -10,10 +11,21 @@ CLUSTERING_FOLDER = "clustering_data"
 CLUSTERING_FILE = os.path.join(CLUSTERING_FOLDER, "clusters.json")
 full_df = None
 
+
 def min_max_normalization(df):
     min = df.min()
     max = df.max()
     return ((df - min) / (max - min))
+
+
+def max_tot_norm(cluster):
+    return df.filter(items=cluster, axis=0)['tot_norm'].max()    
+
+
+def map_group(date, clusters):
+    for key, cluster in clusters.items():
+        if date in cluster: return key
+
 
 def get_clusters_dict(linkage_matrix, threshold=MAX_HEIGHT):
     # Set the threshold for the maximum distance between points (used to cut the tree)
@@ -27,36 +39,51 @@ def get_clusters_dict(linkage_matrix, threshold=MAX_HEIGHT):
         cluster_dict[int(cluster_id)].append(i)
     return cluster_dict
 
-def max_tot_norm(cluster):
-    return df.filter(items=cluster, axis=0)['tot_norm'].max()    
 
-def map_group(date, clusters):
-    for key, cluster in clusters.items():
-        if date in cluster: return key
+def get_centroids(data, linkage_matrix, threshold):
+    cluster_assignments = sch.fcluster(linkage_matrix, t=threshold, criterion='distance')
+    unique_clusters = np.unique(cluster_assignments)
+    centroids = []
+    centroid_indices = []
+    for cluster in unique_clusters:
+        cluster_points = data[cluster_assignments == cluster]
+        centroid = np.mean(cluster_points, axis=0)
+        centroids.append(centroid)
+        centroid_indices.append(cluster_points.index[0])
+    return df.iloc[centroid_indices]
+
 
 if __name__ == '__main__':
     with open('metrics.json', 'r') as metrics:
         json_data = json.load(metrics)
+    plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
+    
     full_df = pd.DataFrame.from_dict(json_data, orient='index')
     full_df.reset_index(level=0, inplace=True, names=['file'])
     df = full_df
-
+    df['mean_degree'] = df['degree'].apply(lambda x: np.mean(x))
+    
     # Normalize dataframe
     df['num_nodes_norm'] = min_max_normalization(df['num_nodes'])
-    df['num_edges_norm'] = min_max_normalization(df['num_edges'])
-    df['tot_norm'] = df['num_nodes_norm'] + df['num_edges_norm']
+    df['mean_degree_norm'] = min_max_normalization(df['mean_degree'])
+    df['tot_norm'] = df['num_nodes_norm'] + df['mean_degree_norm']
     
     # Compute the distance matrix using the Euclidean distance metric
-    data = df[['num_nodes_norm', 'num_edges_norm']]
+    data = df[['num_nodes_norm', 'mean_degree_norm']]
     dist_matrix = sch.distance.pdist(data, metric='euclidean')   
     
     # Perform hierarchical clustering using the computed distance matrix and ward linkage method
-    linkage_matrix = sch.linkage(dist_matrix, method='ward')
+    linkage_matrix = sch.linkage(dist_matrix, method='centroid')
+    
+    # Print the centroid elements
+    centroid_values = get_centroids(data, linkage_matrix, threshold=MAX_HEIGHT)
+    print('\nCentroids: \n')
+    print(centroid_values)
     
     # Plot the dendrogram
     labels = df['file'].str[18:-4].to_list()
     dendrogram = sch.dendrogram(linkage_matrix, color_threshold=MAX_HEIGHT, labels=labels)
-    plt.axhline(y=MAX_HEIGHT, color='r', linestyle='-')
+    plt.tight_layout()
     plt.show()
     
     # 1) Get clusters under MAX_HEIGHT; 2) Sort them by the 'tot_norm' column; 3) Assign them a date label 
