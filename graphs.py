@@ -67,10 +67,9 @@ def plot_graph(g: ig.Graph):
         #vertex_label_size=7.0,
         #edge_color=["#7142cf" if married else "#AAA" for married in g.es["married"]]
     )
-    # Enable LaTeX text rendering (requires latex istalled and accessible from python environment)
-    #plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
-    #plt.rcParams.update({"font.family": "monospace"})
-    #ax.legend(handles=handles, labels=labels, fontsize=15)
+    
+    plt.legend(handles=handles, labels=labels, fontsize=11)
+    plt.tight_layout()
     plt.show()
 
 
@@ -162,13 +161,17 @@ def get_spectral_radius(largest_cc: ig.Graph) -> ig.Graph:
 
 
 if __name__ == '__main__':
+    # Enable LaTeX text rendering (requires latex installed and accessible from python environment)
+    plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
+    # Or else a different font
+    # plt.rcParams.update({"font.family": "monospace"})
+    
     rows = {}
     for file_name in os.listdir(DS_TRANSFORMED):
         if not file_name.startswith("listcontacts"): continue
         df = pd.read_csv(os.path.join(DS_TRANSFORMED, file_name), delimiter=',')
         g = build_graph(df)
-        # plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
-        # if file_name.endswith('05_28.csv'): plot_graph(g)
+        # if file_name.endswith('04_28.csv'): plot_graph(g)
         
         weights = [1/w for w in g.es['intensity']]  # igraph consider weights as distances instead of connection strengths
         largest_cc = get_largest_component(g)
@@ -181,15 +184,15 @@ if __name__ == '__main__':
             "density": g.density(loops=False),
             "bridges": len(g.bridges()),
             "brokers": get_brokers(g),
-            "brokers_entry_time": [g.vs['entry'][b].hour for b in get_brokers(g)],
+            "brokers_entry_time": [g.vs['entry'][b].strftime('%H:%M') for b in get_brokers(g)],
             "connected_components_size": get_components_size(g),
             "degree": g.degree(),
             "edge_intensities": [i for i in g.es['intensity']] ,
             "closeness": g.closeness(),
-            "betweenness": g.betweenness(),                               #[b/len(g.vs)**2 for b in g.betweenness()],
+            "betweenness": g.betweenness(),                               # [b/len(g.vs)**2 for b in g.betweenness()],
             #"weighted_betweenness": g.betweenness(weights=weights),      # Weights considered as distances
             "katz": katz_centrality(largest_cc, alpha=0.04),              # 0.04 is "1/max(spectral_radius)" 
-            "nodes_entry_hour": [entry.hour for entry in g.vs['entry']],
+            "nodes_entry_time": [entry.strftime('%H:%M') for entry in g.vs['entry']],
             "nodes_visit_duration": [(exit - entry).total_seconds()/60 for entry, exit in zip(g.vs['entry'], g.vs['exit'])],
             "largest_connected_component": largest_cc.vs['name'],
             "largest_cc_spectral_radius": get_spectral_radius(largest_cc),

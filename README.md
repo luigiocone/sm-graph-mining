@@ -6,3 +6,5 @@ Project for "sistemi multiagente" course at Unisannio
 pip install -r requirements.txt      # Setup (only once)
 run.bat                              # Run
 ```
+
+Requires LaTeX installed and accessible from python environment
