@@ -40,16 +40,20 @@ def get_clusters_dict(linkage_matrix, threshold=MAX_HEIGHT):
     return cluster_dict
 
 
-def get_centroids(data, linkage_matrix, threshold):
+def get_centroids(data : pd.DataFrame, linkage_matrix, threshold):
     cluster_assignments = sch.fcluster(linkage_matrix, t=threshold, criterion='distance')
     unique_clusters = np.unique(cluster_assignments)
-    centroids = []
+    
     centroid_indices = []
     for cluster in unique_clusters:
         cluster_points = data[cluster_assignments == cluster]
         centroid = np.mean(cluster_points, axis=0)
-        centroids.append(centroid)
-        centroid_indices.append(cluster_points.index[0])
+        # Calculate the Euclidean distance between each cluster point and the centroid vector
+        dist_from_centroid = np.linalg.norm(cluster_points.sub(centroid, axis='columns'), axis=1)
+        # Add the point having the least distance
+        closest_point = np.argmin(dist_from_centroid)
+        centroid_indices.append(cluster_points.index[closest_point])
+    
     return df.iloc[centroid_indices]
 
 
